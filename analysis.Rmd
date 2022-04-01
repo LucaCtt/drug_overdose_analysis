@@ -1,0 +1,29 @@
+---
+title: "Drug Overdose Analysis"
+output: html_notebook
+---
+
+# Preparation
+
+## Install packages
+
+The first step is to install the necessary packages for data analysis.
+
+```{r}
+install.packages("dplyr")
+install.packages("ggplot2")
+library("dplyr")
+library("ggplot2")
+```
+
+- **dplyr**: provides a set of tools for efficiently manipulating datasets in R.
+- **ggplot2**: for data visualization.
+
+## Import data set
+
+The data set was taken from https://www.kaggle.com/datasets/ruchi798/drug-overdose-deaths
+
+```{r}
+data <- read.csv("drug_deaths.csv")
+names(data)
+```
