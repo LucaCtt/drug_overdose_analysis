@@ -1,11 +1,14 @@
 ---
 title: "Drug Overdose Analysis"
 output:
-  html_notebook: default
   pdf_document: default
+  html_notebook: default
 ---
 
+
+
 # Preparation
+
 
 ## Import packages
 
@@ -15,15 +18,22 @@ The first step of the analysis is to import the necessary packages:
 #install.packages("dplyr")
 #install.packages("ggplot2")
 #install.packages("janitor")
+#install.packages("lubridate")
+
 
 library("dplyr")
 library("ggplot2")
+library("stringr")
 library("janitor")
+library("lubridate")
 ```
 
 - **dplyr**: provides a set of tools for efficiently manipulating datasets in R.
 - **ggplot2**: for data visualization.
+- **stringr**: provides tools to convert the case of strings.
 - **janitor**: for examining and cleaning dirty data.
+- **lubridate**: to simplify working with dates.
+
 
 ## Import data set
 
@@ -37,6 +47,7 @@ data <- read.csv("drug_deaths.csv")
 ```
 
 To check that the data was imported correctly, the `head` function can be used.
+
 ```{r}
 head(data)
 ```
@@ -47,6 +58,7 @@ This question can be answered using the `names` function:
 ```{r}
 names(data)
 ```
+
 The dataset does not include a description for the columns, but most of them are
 quite self-explaining. A few, however, deserve an explanation:
 
@@ -64,7 +76,9 @@ quite self-explaining. A few, however, deserve an explanation:
 - *OtherSignificant*: other significant factors related to the death.
 
 
+
 # Cleaning
+
 
 ## Names
 
@@ -84,15 +98,56 @@ The updated names can be seen using the `names` function:
 names(data)
 ```
 
-## IDs
+
+## Unused columns
 
 The dataset contains, for each record, two ids: `x` and `id`.
 Neither of them are actually useful for this report, so they can be
-removed without any consequence:
+removed without any consequence.
+
+There could however be multiple records with the same id, which could
+be caused by an error in how the dataset was built.
+To verify this, we can use the function `get_dupes()` provided by `janitor`:
+
 ```{r}
-data <- select(data,-x)
-data <- select(data,-id)
+data %>% get_dupes(x)
+data %>% get_dupes(id)
 ```
+
+Since there are no dupes, the columns can be safely deleted:
+
+```{r}
+data <- select(data,-c(x,id))
+```
+
+Also, the column `other_significan` is mostly empty:
+
+```{r}
+mean(data$other_significan=="")
+```
+
+Because it won't be used in this analysis, this column can also be deleted:
+
+```{r}
+data <- select(data, -other_significan)
+```
+
+
+## Inconsistent casing
+
+The values in the column `mannerof_death` have inconsistent casing:
+
+```{r}
+table(data$mannerof_death)
+```
+
+This problem may also be present in other columns of the dataset.
+To fix this, we can use the function `str_to_title` provided by the package `stringr`:
+
+```{r}
+data <- data %>% mutate_all(str_to_title)
+```
+
 
 ## Dates
 
@@ -107,6 +162,7 @@ datetimes <- as.POSIXct(data$date, format="%m/%d/%Y %T")
 times <- strftime(datetimes, format="%H:%M:%S")
 print(unique(times))
 ```
+
 All of the times of death are either "12:00:00 AM" or NA, so they can be eliminated
 from the dataset.
 This means that the significant part of the string is just the date:
@@ -115,17 +171,66 @@ This means that the significant part of the string is just the date:
 data$date <- as.Date(data$date, "%m/%d/%Y")
 ```
 
+
+
 # Data exploration
+
+
+## Distribution of deaths
+
+
+### Over the years
 
 An interesting information that can be easily discovered is the distribution
 of the deaths over the years.
 
 ```{r}
-years <- format(data$date,"%Y")
-table(years)
+deaths_per_year <- data %>%
+  filter(!is.na(date)) %>%
+  group_by(year=format(date,"%Y")) %>%
+  summarise(count=n()) 
+  
+
+ggplot(data=deaths_per_year,aes(x=year,y=count,label=count,fill=count)) +
+  geom_col() +
+  labs(title="Deaths per year",x="Year",y="Number of deaths") +
+  theme_minimal() +
+  theme(legend.position = "none")+
+  geom_text(aes(label = count), nudge_y = 40) 
 ```
-We can also identify the number of records without a date of death (reported
-or actual):
+
+
+### Over the months
+
 ```{r}
-sum(is.na(years))
+deaths_per_month <- data %>%
+  filter(!is.na(date)) %>%
+  group_by(month=month(date,label=TRUE)) %>%
+  summarise(count=n()) 
+  
+
+ggplot(data=deaths_per_month,aes(x=month,y=count,label=count,fill=count)) +
+  geom_col() +
+  labs(title="Deaths per year",x="Month",y="Number of deaths") +
+  scale_x_discrete(labels=format(ISOdate(2004,1:12,1),"%B")) +
+  theme_minimal() +
+  theme(legend.position = "none",axis.text.x=element_text(angle=45))+
+  geom_text(aes(label = count),nudge_y = 20)
+```
+
+
+### Over the days of week
+
+```{r}
+deaths_per_day <- data %>%
+  filter(!is.na(date)) %>%
+  group_by(day=wday(date,label=TRUE)) %>%
+  summarise(count=n()) 
+
+ggplot(data=deaths_per_day,aes(x=day,y=count,label=count,fill=count)) +
+  geom_col() +
+  labs(title="Deaths per year",x="Day of week",y="Number of deaths") +
+  theme_minimal() +
+  theme(legend.position = "none",axis.text.x=element_text(angle=45))+
+  geom_text(aes(label = count),nudge_y = 20)
 ```
