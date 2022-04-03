@@ -15,22 +15,21 @@ output:
 The first step of the analysis is to import the necessary packages:
 
 ```{r}
-#install.packages("dplyr")
-#install.packages("ggplot2")
+#install.packages("tidyverse")
+#install.packages("tidytext")
 #install.packages("janitor")
 #install.packages("lubridate")
 
 
-library("dplyr")
-library("ggplot2")
-library("stringr")
+library("tidyverse")
+library("tidytext")
 library("janitor")
 library("lubridate")
 ```
 
-- **dplyr**: provides a set of tools for efficiently manipulating datasets in R.
-- **ggplot2**: for data visualization.
-- **stringr**: provides tools to convert the case of strings.
+- **tidyverse**: a collection of packages for data science, which includes
+  dplyr, ggplot2, and other packages used in this analysis.
+- **tidytext**: text mining utilities.
 - **janitor**: for examining and cleaning dirty data.
 - **lubridate**: to simplify working with dates.
 
@@ -43,20 +42,20 @@ state of Connecticut, in the years between 2012-2018.
 The dataset contains a total of 5105 records, and 42 columns.
 
 ```{r}
-data <- read.csv("drug_deaths.csv")
+deaths <- read.csv("drug_deaths.csv")
 ```
 
 To check that the data was imported correctly, the `head` function can be used.
 
 ```{r}
-head(data)
+head(deaths)
 ```
 The first question that be asked about the dataset is what information it contains,
 i.e. what are the columns of the dataset.
 This question can be answered using the `names` function:
 
 ```{r}
-names(data)
+names(deaths)
 ```
 
 The dataset does not include a description for the columns, but most of them are
@@ -90,46 +89,70 @@ problematic variable names, by doing the following cleaning steps:
 - Converts “%” to “percent” to retain meaning
 
 ```{r}
-data <- data %>% clean_names()
+deaths <- deaths %>% clean_names()
 ```
 
 The updated names can be seen using the `names` function:
 ```{r}
-names(data)
+names(deaths)
 ```
 
 
-## Unused columns
+## Convert empty strings to NA
+
+There could be empty strings in some cells of the dataset.
+It's useful to convert such empty strings to NA, so they can be easily
+excluded from queries.
+
+```{r}
+deaths <- deaths %>% mutate_all(na_if,"")
+```
+
+The sex field seems to contain a few fields with the `Unknown` value,
+which can be converted to `NA`.
+
+```{r}
+deaths <- deaths %>%
+    mutate(sex = ifelse(sex=="Unknown", NA, sex))
+```
+
+
+## Column modifications
 
 The dataset contains, for each record, two ids: `x` and `id`.
-Neither of them are actually useful for this report, so they can be
-removed without any consequence.
+This means that one of them can be removed without consequences.
 
 There could however be multiple records with the same id, which could
 be caused by an error in how the dataset was built.
 To verify this, we can use the function `get_dupes()` provided by `janitor`:
 
 ```{r}
-data %>% get_dupes(x)
-data %>% get_dupes(id)
+deaths %>% get_dupes(x)
 ```
 
-Since there are no dupes, the columns can be safely deleted:
+Since there are no dupes, the `x` can be safely deleted:
 
 ```{r}
-data <- select(data,-c(x,id))
+deaths <- select(deaths,-x)
 ```
 
 Also, the column `other_significan` is mostly empty:
 
 ```{r}
-mean(data$other_significan=="")
+mean(is.na(deaths$other_significan))
 ```
 
 Because it won't be used in this analysis, this column can also be deleted:
 
 ```{r}
-data <- select(data, -other_significan)
+deaths <- select(deaths, -other_significan)
+```
+
+The dataset contains a column named `morphine_not_heroin`, which
+can be renamed to just `heroin`.
+```{r}
+deaths <- deaths %>%
+  rename(morphine = morphine_not_heroin)
 ```
 
 
@@ -138,14 +161,14 @@ data <- select(data, -other_significan)
 The values in the column `mannerof_death` have inconsistent casing:
 
 ```{r}
-table(data$mannerof_death)
+table(deaths$mannerof_death)
 ```
 
 This problem may also be present in other columns of the dataset.
 To fix this, we can use the function `str_to_title` provided by the package `stringr`:
 
 ```{r}
-data <- data %>% mutate_all(str_to_title)
+deaths <- deaths %>% mutate_all(str_to_title)
 ```
 
 
@@ -158,7 +181,7 @@ However, looking at the data, it can be noticed that for most of the date-times,
 the timepart is always equal to "12:00:00 AM". This can be verified:
 
 ```{r}
-datetimes <- as.POSIXct(data$date, format="%m/%d/%Y %T")
+datetimes <- as.POSIXct(deaths$date, format="%m/%d/%Y %T")
 times <- strftime(datetimes, format="%H:%M:%S")
 print(unique(times))
 ```
@@ -168,9 +191,8 @@ from the dataset.
 This means that the significant part of the string is just the date:
 
 ```{r}
-data$date <- as.Date(data$date, "%m/%d/%Y")
+deaths$date <- as.Date(deaths$date, "%m/%d/%Y")
 ```
-
 
 
 # Data exploration
@@ -179,13 +201,102 @@ data$date <- as.Date(data$date, "%m/%d/%Y")
 ## Distribution of deaths
 
 
+### By sex
+
+```{r}
+deaths_by_sex <- deaths %>%
+  filter(!is.na(sex), sex != "Unknown") %>%
+  group_by(sex) %>%
+  summarise(count=n())
+
+ggplot(data=deaths_by_sex,aes(x=sex,y=count,label=count,fill=count)) +
+  geom_bar(stat="identity") +
+  labs(title="Deaths by sex",x="Sex",y="Number of deaths") +
+  geom_text(nudge_y = 200,  size = 5) +
+  theme_minimal() +
+  theme(legend.position="none")
+```
+
+```{r}
+deaths_drugs <- deaths %>%
+  select(
+    "id",
+    "sex",
+    "heroin",
+    "fentanyl",
+    "fentanyl_analogue",
+    "morphine",
+    "cocaine",
+    "oxycodone",
+    "oxymorphone",
+    "ethanol",
+    "hydrocodone",
+    "benzodiazepine",
+    "methadone",
+    "amphet",
+    "tramad",
+    "hydromorphone"
+  ) %>%
+  pivot_longer(
+    cols = c(
+    "heroin",
+    "fentanyl",
+    "fentanyl_analogue",
+    "cocaine",
+    "oxycodone",
+    "oxymorphone",
+    "morphine",
+    "ethanol",
+    "hydrocodone",
+    "benzodiazepine",
+    "methadone",
+    "amphet",
+    "tramad",
+    "hydromorphone"
+    ),
+    names_to = "drug_name",
+    values_to = "value",
+    values_drop_na = TRUE,
+  ) %>%
+  mutate(value = as.numeric(value))
+```
+
+```{r}
+deaths_drugs %>%
+  filter(!is.na(sex),value!=0) %>%
+  group_by(drug_name,sex) %>%
+  summarise(count=sum(value), .groups = "drop") %>%
+  mutate(sex = as.factor(sex),
+        drug_name = reorder_within(drug_name, count, sex)) %>%  
+  ggplot(aes(
+    x = fct_reorder(drug_name, count),
+    y = count,
+    label = count,
+    fill = drug_name
+  )) +
+  geom_col(width = 0.8) +
+  scale_y_continuous(expand = expansion(add = c(0, 600)))+
+  geom_text(hjust = -0.2, size = 3.5) +
+  coord_flip()+
+  scale_x_reordered()+
+  facet_wrap(vars(sex),scales="free")+
+  labs(
+    title = "Drugs most popular among genders",
+    x = "Drug name",
+    y = "Count"
+  ) +
+  theme_minimal()+
+  theme(legend.position = "none")
+```
+
+
 ### Over the years
 
 An interesting information that can be easily discovered is the distribution
 of the deaths over the years.
 
 ```{r}
-deaths_per_year <- data %>%
+deaths_per_year <- deaths %>%
   filter(!is.na(date)) %>%
   group_by(year=format(date,"%Y")) %>%
   summarise(count=n()) 
@@ -196,14 +307,14 @@ ggplot(data=deaths_per_year,aes(x=year,y=count,label=count,fill=count)) +
   labs(title="Deaths per year",x="Year",y="Number of deaths") +
   theme_minimal() +
   theme(legend.position = "none")+
-  geom_text(aes(label = count), nudge_y = 40) 
+  geom_text(nudge_y = 40) 
 ```
 
 
 ### Over the months
 
 ```{r}
-deaths_per_month <- data %>%
+deaths_per_month <- deaths %>%
   filter(!is.na(date)) %>%
   group_by(month=month(date,label=TRUE)) %>%
   summarise(count=n()) 
@@ -222,7 +333,7 @@ ggplot(data=deaths_per_month,aes(x=month,y=count,label=count,fill=count)) +
 ### Over the days of week
 
 ```{r}
-deaths_per_day <- data %>%
+deaths_per_day <- deaths %>%
   filter(!is.na(date)) %>%
   group_by(day=wday(date,label=TRUE)) %>%
   summarise(count=n()) 
@@ -234,3 +345,5 @@ ggplot(data=deaths_per_day,aes(x=day,y=count,label=count,fill=count)) +
   theme(legend.position = "none",axis.text.x=element_text(angle=45))+
   geom_text(aes(label = count),nudge_y = 20)
 ```
+
+## 
