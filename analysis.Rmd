@@ -5,61 +5,49 @@ output:
   html_notebook: default
 ---
 
-
-
 # Preparation
-
 
 ## Import packages
 
 The first step of the analysis is to import the necessary packages:
-
 ```{r}
-#install.packages("tidyverse")
-#install.packages("tidytext")
-#install.packages("janitor")
-#install.packages("lubridate")
-
+#install.packages(c("tidyverse", "tidytext", "janitor", "lubridate","usmap"))
 
 library("tidyverse")
 library("tidytext")
 library("janitor")
 library("lubridate")
+library("usmap")
 ```
-
 - **tidyverse**: a collection of packages for data science, which includes
-  dplyr, ggplot2, and other packages used in this analysis.
+  dplyr, ggplot2, and others.
 - **tidytext**: text mining utilities.
 - **janitor**: for examining and cleaning dirty data.
 - **lubridate**: to simplify working with dates.
 
-
 ## Import data set
 
 The data set was taken from <https://www.kaggle.com/datasets/ruchi798/drug-overdose-deaths>,
-which contains information regarding accidental drug related deaths in the U.S
+and it contains information regarding accidental drug related deaths in the U.S
 state of Connecticut, in the years between 2012-2018.
-The dataset contains a total of 5105 records, and 42 columns.
+The data set contains a total of 5105 records, and 42 columns.
 
 ```{r}
 deaths <- read.csv("drug_deaths.csv")
 ```
-
 To check that the data was imported correctly, the `head` function can be used.
-
 ```{r}
 head(deaths)
 ```
-The first question that be asked about the dataset is what information it contains,
+The first question that can be asked about the dataset is what information it contains,
 i.e. what are the columns of the dataset.
 This question can be answered using the `names` function:
-
 ```{r}
 names(deaths)
 ```
-
-The dataset does not include a description for the columns, but most of them are
-quite self-explaining. A few, however, deserve an explanation:
+The data set does not include a description for the columns,
+but thankfully most of them are self-explaining.
+A few, however, have a non-immediate interpretation:
 
 - *X*: a progressive integer to identify the record, starting from 0.
 - *ID*: probably used to identify the person without revealing private information.
@@ -74,149 +62,161 @@ quite self-explaining. A few, however, deserve an explanation:
 - *COD*: cause of death.
 - *OtherSignificant*: other significant factors related to the death.
 
-
-
 # Cleaning
 
+Now that the data is imported, the next step is to clean the data,
+to standardize that records in the data set and prevent inconsistencies.
 
 ## Names
 
 The `janitor` package provides the `clean_names()` function which handles
 problematic variable names, by doing the following cleaning steps:
-- Return names with only lowercase letters, with _ as a separator
-- Handles special characters and spaces
-- Appends numbers to duplicated names
-- Converts “%” to “percent” to retain meaning
-
+- Return names with only lowercase letters, with _ as a separator;
+- Handles special characters and spaces;
+- Appends numbers to duplicated names;
+- Converts “%” to “percent” to retain meaning.
 ```{r}
 deaths <- deaths %>% clean_names()
 ```
-
 The updated names can be seen using the `names` function:
 ```{r}
 names(deaths)
 ```
 
-
-## Convert empty strings to NA
-
-There could be empty strings in some cells of the dataset.
-It's useful to convert such empty strings to NA, so they can be easily
-excluded from queries.
-
-```{r}
-deaths <- deaths %>% mutate_all(na_if,"")
-```
-
-The sex field seems to contain a few fields with the `Unknown` value,
-which can be converted to `NA`.
-
-```{r}
-deaths <- deaths %>%
-    mutate(sex = ifelse(sex=="Unknown", NA, sex))
-```
-
-
 ## Column modifications
 
-The dataset contains, for each record, two ids: `x` and `id`.
+The dataset contains two ids for each record: `x` and `id`.
 This means that one of them can be removed without consequences.
 
 There could however be multiple records with the same id, which could
 be caused by an error in how the dataset was built.
-To verify this, we can use the function `get_dupes()` provided by `janitor`:
-
+This can be verified by computing the number of unique values of `x` in the set,
+which is equal to the number of records.
 ```{r}
-deaths %>% get_dupes(x)
+length(unique(deaths$x)) == nrow(deaths)
 ```
-
-Since there are no dupes, the `x` can be safely deleted:
-
+Since there are no dupes, the `x` column can be safely deleted:
 ```{r}
 deaths <- select(deaths,-x)
 ```
-
 Also, the column `other_significan` is mostly empty:
-
 ```{r}
-mean(is.na(deaths$other_significan))
+mean(deaths$other_significan == "")
 ```
-
 Because it won't be used in this analysis, this column can also be deleted:
-
 ```{r}
-deaths <- select(deaths, -other_significan)
+deaths <- select(deaths,-other_significan)
 ```
-
-The dataset contains a column named `morphine_not_heroin`, which
-can be renamed to just `heroin`.
+Another column that won't be used is `DateType`:
+```{r}
+deaths <- select(deaths,-date_type)
+```
+The data set contains a column named `morphine_not_heroin`,
+probably to specify that the person specifically used morphine
+instead of heroin, that is produced from morphine.
+This column can be renamed to just `heroin`.
 ```{r}
 deaths <- deaths %>%
   rename(morphine = morphine_not_heroin)
 ```
+There also two columns related to fentanyl: `fentanyl` and `fentanyl_analogue`.
+For this analysis they can be reduced to just one column.
+```{r}
+deaths <- deaths %>%
+  mutate(fentanyl = ifelse(fentanyl_analogue == 1, "1", fentanyl))
 
+deaths <- select(deaths,-fentanyl_analogue)
+```
 
-## Inconsistent casing
+## Convert values
+
+There could be empty strings in some cells of the dataset.
+It's useful to convert such empty strings to NA, so they can be easily
+excluded from queries.
+```{r}
+deaths <- deaths %>% mutate_all(na_if, "")
+```
+The `sex` field seems to contain a few fields with the `Unknown` value,
+which can also be converted to `NA`.
+```{r}
+table(deaths$sex)
+
+deaths <- deaths %>%
+  mutate(sex = ifelse(sex == "Unknown", NA, sex))
+```
+Another couple of columns related to drugs contain weird values:
+```{r}
+deaths %>%
+  select(fentanyl, morphine) %>%
+  filter((fentanyl != "1" &
+            fentanyl != "0") | (morphine != "1" & morphine != "0"))
+```
+The ones related to fentanyl seem to suggest that the drug was detected,
+so they can all be put to `1`.
+The cells about morphine instead are unclear so they should be set to NA.
+```{r}
+deaths <- deaths %>%
+  mutate(fentanyl = ifelse((fentanyl != "1" &
+                              fentanyl != "0"), 1, fentanyl))
+
+deaths <- deaths %>%
+  mutate(morphine = ifelse((morphine != "1" &
+                              morphine != "0"), NA, morphine))
+```
+
+## Inconsistent letter casing
 
 The values in the column `mannerof_death` have inconsistent casing:
-
 ```{r}
 table(deaths$mannerof_death)
 ```
-
-This problem may also be present in other columns of the dataset.
-To fix this, we can use the function `str_to_title` provided by the package `stringr`:
-
+This problem may also be present in other columns of the data set.
+The function `str_to_title` provided by the package `stringr` can be used
+to fix this:
 ```{r}
 deaths <- deaths %>% mutate_all(str_to_title)
 ```
 
-
 ## Dates
 
-The dataset contains the date of death as a string, which consists in the 
-actual date, plus the time of death. So it can be useful to convert the 
-string to an actual date-time class.
-However, looking at the data, it can be noticed that for most of the date-times,
-the timepart is always equal to "12:00:00 AM". This can be verified:
+The data set contains the date of death as a string, which consists in the 
+actual date, plus the time of death.
 
+It can be useful to convert the 
+string to an actual date-time class.
+However, in the data, for most of the date-times,
+the substring that specifies the time
+is always equal to "12:00:00 AM".
 ```{r}
-datetimes <- as.POSIXct(deaths$date, format="%m/%d/%Y %T")
-times <- strftime(datetimes, format="%H:%M:%S")
+datetimes <- as.POSIXct(deaths$date, format = "%m/%d/%Y %T")
+times <- strftime(datetimes, format = "%H:%M:%S")
 print(unique(times))
 ```
-
 All of the times of death are either "12:00:00 AM" or NA, so they can be eliminated
-from the dataset.
+from the data set.
 This means that the significant part of the string is just the date:
-
 ```{r}
 deaths$date <- as.Date(deaths$date, "%m/%d/%Y")
 ```
 
-
 # Data exploration
 
+## Analysis of the use of drugs
 
-## Distribution of deaths
+To simplify the extraction of information about the drug use, a new data frame
+can be built using `pivot_longer`.
 
+This function allows, for each record (which in the original data frame corresponds
+to a single person), to create *n* records in the new data frame, where *n* is
+the total number of different drugs reported in the data set (heroin, fentanyl,
+morphine, ...). Each of these new records will correspond to a single person,
+i.e. they will all have the same `id`.
+In each of these new rows, a single drug is associated
+to a value of `1` if such drug was reported in the original record,
+or `0' otherwise.
 
-### By sex
-
-```{r}
-deaths_by_sex <- deaths %>%
-  filter(!is.na(sex), sex != "Unknown") %>%
-  group_by(sex) %>%
-  summarise(count=n())
-
-ggplot(data=deaths_by_sex,aes(x=sex,y=count,label=count,fill=count)) +
-  geom_bar(stat="identity") +
-  labs(title="Deaths by sex",x="Sex",y="Number of deaths") +
-  geom_text(nudge_y = 200,  size = 5) +
-  theme_minimal() +
-  theme(legend.position="none")
-```
-
+In other words, `pivot_longer` lengthens the data, increasing the number of rows
+and decreasing the number of columns.
 ```{r}
 deaths_drugs <- deaths %>%
   select(
@@ -224,7 +224,6 @@ deaths_drugs <- deaths %>%
     "sex",
     "heroin",
     "fentanyl",
-    "fentanyl_analogue",
     "morphine",
     "cocaine",
     "oxycodone",
@@ -239,35 +238,182 @@ deaths_drugs <- deaths %>%
   ) %>%
   pivot_longer(
     cols = c(
-    "heroin",
-    "fentanyl",
-    "fentanyl_analogue",
-    "cocaine",
-    "oxycodone",
-    "oxymorphone",
-    "morphine",
-    "ethanol",
-    "hydrocodone",
-    "benzodiazepine",
-    "methadone",
-    "amphet",
-    "tramad",
-    "hydromorphone"
+      "heroin",
+      "fentanyl",
+      "cocaine",
+      "oxycodone",
+      "oxymorphone",
+      "morphine",
+      "ethanol",
+      "hydrocodone",
+      "benzodiazepine",
+      "methadone",
+      "amphet",
+      "tramad",
+      "hydromorphone"
     ),
     names_to = "drug_name",
     values_to = "value",
     values_drop_na = TRUE,
   ) %>%
-  mutate(value = as.numeric(value))
+  mutate(value = as.numeric(value))  
+```
+
+### Most used drugs
+
+Using this new data frame, the distribution in the use of drugs can be discovered:
+```{r}
+deaths_drugs %>%
+  filter(value != 0) %>%
+  group_by(drug_name) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(
+    x = drug_name,
+    y = count,
+    label = count,
+    fill = count
+  )) +
+  geom_col() +
+  labs(title = "Drugs found in subjects", x = "Drug", y = "Number of subjects") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45)) +
+  geom_text(nudge_y = 80)  
+```
+### Number of drugs used
+
+We can also analyze the number of (different) drugs used by the subjects.
+```{r}
+deaths_drugs %>%
+  group_by(id) %>%
+  summarise(count = sum(value)) %>%
+  count(count) %>%
+  ggplot(aes(
+    x = count,
+    y = n,
+    label = n,
+    fill = n
+  )) +
+  geom_col() +
+  labs(title = "Number of different drugs found in subjects", x = "Number of drugs", y = "Subjects") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_text(nudge_y = 60)
+```
+The fact that there are subject with no drugs is noteworthy:
+this could suggest an error in the reporting, or maybe there were
+signs of drug overdose on the patient,
+but the all the test executed were negative.
+
+### Combination of opioids and benzodiazepines
+
+From the previous plot we can understand that the majority of individuals
+overdosed on two different drugs.
+This is consistent with a study published in 2019, that associates
+the combination of drugs to an increased risk of overdose.
+
+The same study suggest that a particularly lethal combination are opioids
+and benzodiazepines. We can verify how many subjects used these drugs:
+```{r}
+death_op_ben <- deaths %>%
+  filter(any_opioid == "1", benzodiazepine == "1") %>%
+  count()
+
+sprintf("%0.1f%%", death_op_ben / count(deaths) * 100)
+```
+
+### Multiple drugs
+
+We can also extract the percentage of individuals that overdosed on multiple drugs:
+```{r}
+death_by_multiple_drugs <- deaths_drugs %>%
+  group_by(id) %>%
+  summarise(count = sum(value)) %>%
+  count(count) %>%
+  filter(count >= 2) %>%
+  reduce(sum)
+
+
+sprintf("%0.1f%%", death_by_multiple_drugs / count(deaths) * 100)
+```
+### Single drug
+
+Still, a lot of people overdosed on a single drug. It's interesting to discover
+which one it is.
+```{r}
+ids <- (deaths_drugs %>%
+          group_by(id) %>%
+          summarise(count = sum(value)) %>%
+          filter(count == 1))[["id"]]
+
+deaths_drugs %>%
+  filter(id %in% ids, value == 1) %>%
+  group_by(drug_name) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(
+    x = drug_name,
+    y = count,
+    label = count,
+    fill = count
+  )) +
+  geom_col() +
+  labs(title = "Overdose by single drug", x = "Drug", y = "Number of deaths") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45)) +
+  geom_text(nudge_y = 40)  
+```
+So, heroin is the drug that is most overdosed on by itself, with fentanyl coming second.
+This is not surprising, because these two are the two most used drugs.
+
+### Drug usage with alcohol
+
+Another interesting statistic is the number of individuals that used drugs
+along with alcohol (ethanol):
+```{r}
+ids <- (deaths_drugs %>%
+          filter(drug_name == "ethanol", value == 1))[["id"]]
+
+used_alcohol <- deaths_drugs %>%
+  filter(id %in% ids) %>%
+  group_by(id) %>%
+  summarise(count = sum(value)) %>%
+  count(count) %>%
+  filter(count >= 2) %>%
+  reduce(sum)
+
+sprintf("%0.1f%%", used_alcohol / count(deaths) * 100)
+```
+
+## Analysis by sex
+
+### Deaths by sex
+
+```{r}
+deaths %>%
+  filter(!is.na(sex), sex != "Unknown") %>%
+  group_by(sex) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(
+    x = sex,
+    y = count,
+    label = count,
+    fill = count
+  )) +
+  geom_bar(stat = "identity") +
+  labs(title = "Deaths by sex", x = "Sex", y = "Number of deaths") +
+  geom_text(nudge_y = 200,  size = 5) +
+  theme_minimal() +
+  theme(legend.position = "none")
 ```
 
 ```{r}
 deaths_drugs %>%
-  filter(!is.na(sex),value!=0) %>%
-  group_by(drug_name,sex) %>%
-  summarise(count=sum(value), .groups = "drop") %>%
+  filter(!is.na(sex), value != 0) %>%
+  group_by(drug_name, sex) %>%
+  summarise(count = sum(value), .groups = "drop") %>%
   mutate(sex = as.factor(sex),
-        drug_name = reorder_within(drug_name, count, sex)) %>%  
+         drug_name = reorder_within(drug_name, count, sex)) %>%
   ggplot(aes(
     x = fct_reorder(drug_name, count),
     y = count,
@@ -275,75 +421,132 @@ deaths_drugs %>%
     fill = drug_name
   )) +
   geom_col(width = 0.8) +
-  scale_y_continuous(expand = expansion(add = c(0, 600)))+
+  scale_y_continuous(expand = expansion(add = c(0, 600))) +
   geom_text(hjust = -0.2, size = 3.5) +
-  coord_flip()+
-  scale_x_reordered()+
-  facet_wrap(vars(sex),scales="free")+
-  labs(
-    title = "Drugs most popular among genders",
-    x = "Drug name",
-    y = "Count"
-  ) +
-  theme_minimal()+
+  coord_flip() +
+  scale_x_reordered() +
+  facet_wrap(vars(sex), scales = "free") +
+  labs(title = "Most popular drugs by gender",
+       x = "Drug name",
+       y = "Count") +
+  theme_minimal() +
   theme(legend.position = "none")
 ```
-
 
 ### Over the years
 
 An interesting information that can be easily discovered is the distribution
 of the deaths over the years.
-
 ```{r}
-deaths_per_year <- deaths %>%
+deaths %>%
   filter(!is.na(date)) %>%
-  group_by(year=format(date,"%Y")) %>%
-  summarise(count=n()) 
-  
-
-ggplot(data=deaths_per_year,aes(x=year,y=count,label=count,fill=count)) +
+  group_by(year = format(date, "%Y")) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(
+    x = year,
+    y = count,
+    label = count,
+    fill = count
+  )) +
   geom_col() +
-  labs(title="Deaths per year",x="Year",y="Number of deaths") +
+  labs(title = "Deaths per year", x = "Year", y = "Number of deaths") +
   theme_minimal() +
-  theme(legend.position = "none")+
+  theme(legend.position = "none") +
   geom_text(nudge_y = 40) 
 ```
-
 
 ### Over the months
 
 ```{r}
-deaths_per_month <- deaths %>%
+deaths %>%
   filter(!is.na(date)) %>%
-  group_by(month=month(date,label=TRUE)) %>%
-  summarise(count=n()) 
-  
-
-ggplot(data=deaths_per_month,aes(x=month,y=count,label=count,fill=count)) +
+  group_by(month = month(date, label = TRUE)) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(
+    x = month,
+    y = count,
+    label = count,
+    fill = count
+  )) +
   geom_col() +
-  labs(title="Deaths per year",x="Month",y="Number of deaths") +
-  scale_x_discrete(labels=format(ISOdate(2004,1:12,1),"%B")) +
+  labs(title = "Deaths per month", x = "Month", y = "Number of deaths") +
+  scale_x_discrete(labels = format(ISOdate(2004, 1:12, 1), "%B")) +
   theme_minimal() +
-  theme(legend.position = "none",axis.text.x=element_text(angle=45))+
-  geom_text(aes(label = count),nudge_y = 20)
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45)) +
+  geom_text(nudge_y = 20)
 ```
-
 
 ### Over the days of week
 
 ```{r}
-deaths_per_day <- deaths %>%
+deaths %>%
   filter(!is.na(date)) %>%
-  group_by(day=wday(date,label=TRUE)) %>%
-  summarise(count=n()) 
-
-ggplot(data=deaths_per_day,aes(x=day,y=count,label=count,fill=count)) +
+  group_by(day = wday(date, label = TRUE)) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(
+    x = day,
+    y = count,
+    label = count,
+    fill = count
+  )) +
   geom_col() +
-  labs(title="Deaths per year",x="Day of week",y="Number of deaths") +
+  labs(title = "Deaths per day of week", x = "Day of week", y = "Number of deaths") +
   theme_minimal() +
-  theme(legend.position = "none",axis.text.x=element_text(angle=45))+
-  geom_text(aes(label = count),nudge_y = 20)
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45)) +
+  geom_text(nudge_y = 40)
 ```
 
-## 
+
+# Distribution of death in state
+
+```{r}
+deaths <- deaths %>%
+  mutate(death_county = ifelse(death_county == "Usa", NA, death_county))
+
+deaths_by_county <- deaths %>%
+  group_by(death_county) %>%
+  filter(!is.na(death_county)) %>%
+  summarise(values = n()) %>%
+  mutate(death_county = fips(state = "CT", county = death_county)) %>%
+  rename(fips = death_county)
+
+plot_usmap(data = deaths_by_county,
+           regions = "counties",
+           include = "CT") +
+  scale_fill_continuous(
+    low = "white",
+    high = "blue",
+    name = "Overdoses per county",
+    label = scales::comma
+  ) +
+  theme(legend.position = "right")
+```
+
+The majority of the recorded overdose deaths happened in the Hartford county.
+This may be related to the density of population in the area.
+
+# Out of state subjects
+
+```{r}
+out_of_state <- deaths %>%
+  group_by(residence_state) %>%
+  filter(!is.na(residence_state),tolower(residence_state)!="ct") %>%
+  summarise(values = n()) %>%
+  rename(state=residence_state)
+
+sprintf("%0.1f%%", sum(out_of_state[["values"]]) / count(deaths) * 100)
+```
+
+```{r}
+plot_usmap(data = out_of_state,
+           regions = "state")+
+  scale_fill_continuous(
+    low = "white",
+    high = "blue",
+    name = "Overdoses per county",
+    label = scales::comma
+  ) +
+  theme(legend.position = "right")
+```
