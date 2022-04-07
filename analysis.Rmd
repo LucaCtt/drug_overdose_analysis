@@ -1,7 +1,8 @@
 ---
 title: "Drug Overdose Analysis"
 output:
-  pdf_document: default
+  pdf_document: 
+    keep_tex: yes
   html_notebook: default
 ---
 
@@ -17,13 +18,16 @@ library("janitor")
 library("lubridate")
 library("usmap")
 library("treemap")
+
+theme_set(theme_minimal()) #ggplot2 theme
 ```
 - **tidyverse**: a collection of packages for data science, which includes
   dplyr, ggplot2, and others.
 - **tidytext**: text mining utilities.
 - **janitor**: for examining and cleaning dirty data.
-- **lubridadata te**: to make working with dates easier.
+- **lubridate**: to make working with dates easier.
 - **usmap**: for US map data frames.
+- **treemap**: for treemap plots.
 
 ## Import data set
 
@@ -195,32 +199,29 @@ deaths$date <- as.Date(deaths$date, "%m/%d/%Y")
 
 ## NA values
 
+We can analyse the percentage of NA values for each column:
 ```{r plot-na}
 missing <- colMeans(is.na(deaths)) * 100
 missing <- missing[missing >= 1]
 missing <- data.frame(missing)
 missing <- rownames_to_column(missing, var = "row_name")
 
-missing$label = sprintf("%0.1f%%", missing$missing)
-
 ggplot(data = missing, aes(
   x = fct_reorder(row_name, missing),
   y = missing,
-  label = label,
-  fill = missing
+  label = sprintf("%0.1f%%", missing)
 )) +
-  geom_segment(aes(xend = row_name, y = 0, yend = missing), color = "grey") +
+  geom_segment(aes(xend = row_name, y = 0, yend = missing), color = "skyblue") +
   geom_point(color = "blue",
              size = 3,
-             alpha = 0.8) +
+             alpha = 0.6) +
   geom_text(nudge_y = 7) +
   coord_flip() +
-  theme_minimal() +
-  theme(legend.position = "none") +
   labs(title = "Percentage of NA values for each column", x = "Column", y =
          "Percentage of NA values")
 ```
-The columns that contain mostly NAs can be removed from the data frame.
+The columns that contain mostly NA values are not particularly
+useful, so they can be removed from the data frame.
 ```{r delete-na-columns}
 deaths <- deaths %>%
   select(-c(
@@ -306,14 +307,13 @@ deaths_drugs %>%
     x = drug_name,
     y = count,
     label = count,
-    fill = count
+    fill = drug_name
   )) +
-  geom_col() +
+  geom_col(width = 0.5) +
   labs(title = "Drugs found in subjects", x = "Drug",
        y = "Number of subjects") +
-  theme_minimal() +
   theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45,vjust=0.8)) +
+        axis.text.x = element_text(angle = 45, vjust = 0.8)) +
   geom_text(nudge_y = 80)  
 ```
 Heroin and fentanyl, both of which are opioids, are the two most
@@ -336,13 +336,18 @@ deaths_drugs %>%
     label = n,
     fill = n
   )) +
-  geom_col() +
+  geom_col(width = 0.5) +
   labs(title = "Distinct drugs found in subjects",
        x = "Number of drugs", y = "Subjects") +
-  theme_minimal() +
   theme(legend.position = "none") +
   geom_text(nudge_y = 60)
 ```
+
+From this plot we can understand that the majority of individuals
+overdosed on two distinct drugs at the same.
+This is consistent with a study published in 2019, that associates
+the combination of drugs to an increased risk of overdose.
+
 The fact that there are subject with no drugs reported is noteworthy:
 this could suggest an error in the data insertion, or maybe there were
 signs of drug overdose on the patient,
@@ -366,12 +371,7 @@ sprintf("%0.1f%%", death_by_multiple_drugs / count(deaths) * 100)
 
 ## Combination of opioids and benzodiazepines
 
-From the previous plot we can understand that the majority of individuals
-overdosed on two distinct drugs at the same.
-This is consistent with a study published in 2019, that associates
-the combination of drugs to an increased risk of overdose.
-
-The same study suggest that a particularly lethal combination are opioids
+A particularly lethal combination of drugs are opioids
 and benzodiazepines. We can verify how many subjects used these two drugs
 at the same time:
 ```{r opioids-benzodazepines}
@@ -399,19 +399,18 @@ deaths_drugs %>%
     x = drug_name,
     y = count,
     label = count,
-    fill = count
+    fill = drug_name
   )) +
-  geom_col() +
+  geom_col(width=0.5) +
   labs(title = "Overdose deaths by single drug", x = "Drug", y = "Number of deaths") +
-  theme_minimal() +
   theme(legend.position = "none",
         axis.text.x = element_text(angle = 45,vjust=0.8)) +
-  geom_text(nudge_y = 40)  
+  geom_text(nudge_y = 20)  
 ```
 So, heroin is the drug that is most overdosed on by itself
 with fentanyl coming second.
 This is not surprising because, as we have seen before,
-these two are the two overall most used drugs.
+these two are the overall most used drugs.
 
 A fascinating result is that ethanol and benzodiazepines, while also
 being among the drugs most commonly found in the subjects,
@@ -438,8 +437,11 @@ sprintf("%0.1f%%", used_alcohol / count(deaths) * 100)
 ```
 # Analysis of death locations
 
+We can also study the death locations of the subjects.
+
 ## Death location distribution
 
+A treemap can be used to show how the locations are distributed.
 ```{r death-location-distribution}
 locations <- deaths %>%
   group_by(location) %>%
@@ -463,6 +465,8 @@ treemap(
   inflate.labels = TRUE
 )
 ```
+The majority of the subjects died at their home, only less than half
+of them died in a hospital.
 
 ## Death location for most used drugs
 
@@ -490,17 +494,18 @@ deaths_drugs %>%
     label = value,
     fill = location
   )) +
-  geom_col(width = 0.8) +
+  geom_col(width = 0.5) +
   geom_text(vjust = -0.3, size = 4) +
   scale_y_continuous(expand = expansion(add = c(0, 300))) +
   facet_wrap(~ drug_name, scales = "free_x") +
-  theme_minimal() +
   theme(legend.position = "none") +
   theme(axis.text.x = element_text(angle = 45,vjust=0.6)) +
   labs(title = "Death Location by Drug Name",
        x = "Location",
        y = "Count")
 ```
+The most recurring location of death seems to be the subjects resident for
+each type of drug.
 
 # Analysis by sex
 
@@ -520,13 +525,12 @@ deaths %>%
     x = sex,
     y = count,
     label = count,
-    fill = count
+    fill = sex
   )) +
   geom_bar(stat = "identity") +
   labs(title = "Overdose deaths distributed by sex",
        x = "Sex", y = "Number of deaths") +
   geom_text(nudge_y = 200,  size = 5) +
-  theme_minimal() +
   theme(legend.position = "none")
 ```
 
@@ -548,7 +552,7 @@ deaths_drugs %>%
     label = count,
     fill = drug_name
   )) +
-  geom_col(width = 0.8) +
+  geom_col(width = 0.5) +
   scale_y_continuous(expand = expansion(add = c(0, 600))) +
   geom_text(hjust = -0.2, size = 3.5) +
   coord_flip() +
@@ -557,7 +561,6 @@ deaths_drugs %>%
   labs(title = "Most popular drugs for each sex",
        x = "Drug name",
        y = "Number of subjects") +
-  theme_minimal() +
   theme(legend.position = "none")
 ```
 Heroin and fentanyl are the two most abused drugs by both sexes.
@@ -576,22 +579,18 @@ deaths %>%
   filter(!is.na(date)) %>%
   group_by(year = format(date, "%Y")) %>%
   summarise(count = n()) %>%
-  ggplot(aes(
-    x = year,
-    y = count,
-    label = count,
-    fill = count
-  )) +
-  geom_segment( aes(xend=year, y=0, yend=count), color="grey") +
+  ggplot(aes(x = year,
+             y = count,
+             label = count)) +
+  geom_segment(aes(xend = year, y = 0, yend = count), color = "skyblue") +
   geom_point(color = "blue",
              size = 3,
-             alpha = 0.8) +
+             alpha = 0.6) +
   coord_flip() +
-  labs(title = "Deaths per year", x = "Year", y = "Number of deaths") +
+  labs(title = "Overdose deaths by year",
+       x = "Year", y = "Number of deaths") +
   scale_x_discrete(limits = rev) +
   scale_y_continuous(expand = expansion(add = c(0, 300))) +
-  theme_minimal() +
-  theme(legend.position = "none") +
   geom_text(nudge_y = 60) 
 ```
 In this plot we can see that the number of overdose is skyrocketing each
@@ -606,22 +605,18 @@ deaths %>%
   filter(!is.na(date)) %>%
   group_by(month = month(date, label = TRUE)) %>%
   summarise(count = n()) %>%
-  ggplot(aes(
-    x = month,
-    y = count,
-    label = count,
-    fill = count
-  )) +
-  geom_segment(aes(xend = month, y = 0, yend = count), color = "grey") +
+  ggplot(aes(x = month,
+             y = count,
+             label = count)) +
+  geom_segment(aes(xend = month, y = 0, yend = count), color = "skyblue") +
   geom_point(color = "blue",
              size = 3,
-             alpha = 0.8) +
+             alpha = 0.6) +
   coord_flip() +
-  labs(title = "Deaths per month", x = "Month", y = "Number of deaths") +
+  labs(title = "Overdose deaths by month",
+       x = "Month", y = "Number of deaths") +
   scale_x_discrete(limits = rev) +
   scale_y_continuous(expand = expansion(add = c(0, 300))) +
-  theme_minimal() +
-  theme(legend.position = "none") +
   geom_text(nudge_y = 30)
 ```
 This plot does not contain any particularly useful information:
@@ -639,20 +634,17 @@ deaths %>%
   ggplot(aes(
     x = day,
     y = count,
-    label = count,
-    fill = count
+    label = count
   )) +
-  geom_segment(aes(xend = day, y = 0, yend = count), color = "grey") +
+  geom_segment(aes(xend = day, y = 0, yend = count), color = "skyblue") +
   geom_point(color = "blue",
              size = 3,
-             alpha = 0.8) +
+             alpha = 0.6) +
   coord_flip() +
-  labs(title = "Deaths per day of week",
+  labs(title = "Overdose deaths by day of week",
        x = "Day of week", y = "Number of deaths") +
   scale_x_discrete(limits = rev) +
   scale_y_continuous(expand = expansion(add = c(0, 300))) +
-  theme_minimal() +
-  theme(legend.position = "none") +
   geom_text(nudge_y = 40)
 ```
 The number of deaths is higher during the weekends: this could be caused
@@ -660,6 +652,18 @@ by parties and increased nightlife, where it is easier to come in contact
 with drugs.
 
 # Age
+
+It's also interesting to study the age of the subjects.
+For this purpose, we can create a new data frame that
+contains, for each subject, the age group they belong to.
+
+The age groups considered are:
+- < 20
+- 20-29
+- 30-39
+- 40-49
+- 50-59
+- >= 60
 
 ```{r age-groups}
 deaths_age <- deaths %>%
@@ -676,10 +680,12 @@ deaths_age <- deaths %>%
     ),
     age_group = factor(
       age_group,
-      levels = c("< 20", "20-29", "30-39", "40-49", "50-59", "> 60")
+      levels = c("< 20", "20-29", "30-39", "40-49", "50-59", ">= 60")
     )
   )
 ```
+
+## Distribution of deaths by age group
 
 ```{r deaths-age}
 deaths_age %>%
@@ -694,19 +700,19 @@ deaths_age %>%
   geom_col(width = 0.5) +
   coord_flip() +
   geom_text(hjust = -0.2) +
-  theme_minimal()+
   theme(legend.position = "none") +
-  scale_y_continuous(expand = expansion(add = c(0, 200))) +
+  scale_x_discrete(limits = rev) +
+  scale_y_continuous(expand = expansion(add = c(0, 500))) +
   labs(
-    title = "What Age groups have the most death?",
-    x = "Age groups",
-    y = "Count"
+    title = "Distribution of deaths by age group",
+    x = "Age group",
+    y = "Number of subjects"
   )
 ```
 
 ```{r deaths-age-drugs}
 drugs_age <- deaths_drugs %>%
-  select(id,age,drug_name,value) %>%
+  select(id,age,sex,drug_name,value) %>%
   filter(!is.na(age), drug_name %in% c("heroin","fentanyl","ethanol","cocaine")) %>% 
   mutate(
     age_group = case_when(
@@ -737,16 +743,40 @@ drugs_age %>%
   coord_flip() +
   geom_text(hjust = -0.2) +
   facet_wrap(vars(drug_name)) +
-  theme_minimal()+
   theme(legend.position = "none") +
+  scale_x_discrete(limits = rev) +
   scale_y_continuous(expand = expansion(add = c(0, 200))) +
-  labs(title = "What age groups have the most death vs weekdays?",
-       x = "Age groups",
-       y = "Count")
+  labs(title = "Distribution of drug used by age group",
+       x = "Age group",
+       y = "Number of subjects")
 ```
-## TODO: one more
+## Age and sex
 
-# Distribution of death in state
+```{r age-sex}
+drugs_age %>%
+  filter(!is.na(sex), value != 0) %>%
+  group_by(age_group, sex) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(sex = as.factor(sex)) %>%
+  ggplot(aes(
+    x = age_group,
+    y = count,
+    label = count,
+    fill = age_group
+  )) +
+  geom_col(width = 0.4) +
+  scale_x_discrete(limits = rev) +
+  scale_y_continuous(expand = expansion(add = c(0, 600))) +
+  geom_text(hjust = -0.2, size = 3.5) +
+  coord_flip() +
+  facet_wrap(vars(sex), scales = "free") +
+  labs(title = "Most popular drugs for each sex",
+       x = "Age group",
+       y = "Number of subjects") +
+  theme(legend.position = "none")
+```
+
+# Distribution of deaths in state
 
 It is interesting to analyze where the overdose deaths happened in the state.
 
@@ -767,8 +797,9 @@ plot_usmap(data = deaths_by_county,
            regions = "counties",
            include = "CT") +
   scale_fill_continuous(
-    low = "white",
-    high = "blue",
+    na.value="white",
+    low = "lightcyan",
+    high = "dodgerblue4",
     name = "Overdoses per county",
     label = scales::comma
   ) +
@@ -797,9 +828,10 @@ We can plot the state of residence of such persons:
 plot_usmap(data = out_of_state,
            regions = "state")+
   scale_fill_continuous(
-    low = "white",
-    high = "blue",
-    name = "Overdoses per county",
+    na.value="white",
+    low = "lightcyan",
+    high = "dodgerblue4",
+    name = "Number of residents that overdosed in CT",
     label = scales::comma
   ) +
   theme(legend.position = "right")
@@ -810,18 +842,23 @@ come from the neighboring state of New York.
 ```{r deaths-city-geo}
 geo <- deaths %>%
   group_by(death_city_geo) %>%
-  summarise(count=n()) %>%
-  mutate(temp=str_extract(death_city_geo, "(?<=\\().+?(?=\\))")) %>%
-  mutate(lat=sapply(str_split(temp,","),head,1)) %>%
-  mutate(lon=sapply(str_split(temp,","),tail,1)) %>%
-  mutate(lat=as.numeric(lat),lon=as.numeric(lon)) %>%
-  select(lat,lon,count) 
+  summarise(count = n()) %>%
+  mutate(temp = str_extract(death_city_geo, "(?<=\\().+?(?=\\))")) %>%
+  mutate(lat = sapply(str_split(temp, ","), head, 1)) %>%
+  mutate(lon = sapply(str_split(temp, ","), tail, 1)) %>%
+  mutate(lat = as.numeric(lat), lon = as.numeric(lon)) %>%
+  select(lat, lon, count)
 
 geo_transformed <- usmap_transform(geo)
 
-plot_usmap(include="CT",regions="counties") +
-  geom_point(data = geo_transformed, aes(x=x,y=y,size=count), color = "blue", alpha = 0.35)+ 
-   scale_size_continuous(range = c(0.5, 16),
+plot_usmap(include = "CT", regions = "counties") +
+  geom_point(
+    data = geo_transformed,
+    aes(x = x, y = y, size = count),
+    color = "dodgerblue4",
+    alpha = 0.6
+  ) +
+  scale_size_continuous(range = c(0.5, 16),
                         labels = scales::comma) +
   labs(title = "Map of deaths by overdose",
        size = "Number of deaths by overdose") +
