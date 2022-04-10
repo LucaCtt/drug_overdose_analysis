@@ -4,7 +4,29 @@ output:
   pdf_document: 
     keep_tex: yes
   html_notebook: default
+documentclass: book
+classoption: a4paper
 ---
+
+# Introduction
+
+In this report we will analyze a dataset concerning the deaths by overdose 
+in the U.S. state of Connecticut (CT), between the years 2012 and 2018.
+
+The data set studied was taken at the following link: <https://www.kaggle.com/datasets/ruchi798/drug-overdose-deaths>.
+The source of the data set itself is <data.gov>, a website that publishes
+freely-accessible information regarding the public administration of the U.S.A.
+
+In chapter 1 the necessary initial steps for the analysis are explained.
+In chapter 2, we will continue with the data cleaning operations.
+The various topics studied can be found in chapters 3-8.
+Finally, in chapter 9, we will summarise all the discoveries
+made in the analysis.
+
+## Technical details
+This data analysis was made using R v4.1 on RStudio 2022.02.0.
+All the code can be found at
+<https://github.com/LucaCtt/drug_overdose_analysis>.
 
 # Preparation
 
@@ -22,23 +44,23 @@ library("treemap")
 theme_set(theme_minimal()) #ggplot2 theme
 ```
 - **tidyverse**: a collection of packages for data science, which includes
-  dplyr, ggplot2, and others.
+  dplyr, ggplot2, and mroe.
 - **tidytext**: text mining utilities.
 - **janitor**: for examining and cleaning dirty data.
-- **lubridate**: to make working with dates easier.
+- **lubridate**: utilities for working with dates.
 - **usmap**: for US map data frames.
 - **treemap**: for treemap plots.
 
 ## Import data set
 
-The data set was taken from
-<https://www.kaggle.com/datasets/ruchi798/drug-overdose-deaths>,
+
 and it contains information regarding accidental drug related deaths in the U.S
 state of Connecticut, in the years between 2012-2018.
 ```{r read-csv}
 deaths <- read.csv("drug_deaths.csv")
 ```
-To check that the data was imported correctly, the `head` function can be used.
+To check that the data was imported correctly, the `head` function can be used
+to output the first six records of the data frame.
 ```{r head-dataset}
 head(deaths)
 ```
@@ -47,12 +69,6 @@ i.e. what are its columns.
 This question can be answered using the `names` function:
 ```{r names-dataset}
 names(deaths)
-```
-Using the functions `nrow` and `ncol` we can get the number of rows and columns
-in the data set.
-```{r dimensions-dataset}
-nrow(deaths)
-ncol(deaths)
 ```
 The data set does not include a description for the columns,
 but thankfully most of them are self-explaining.
@@ -71,7 +87,14 @@ A few, however, require an interpretation:
 - *COD*: cause of death.
 - *OtherSignificant*: other significant factors related to the death.
 
-# Cleaning
+Using the functions `nrow` and `ncol` we can get the number of rows and columns
+in the data set.
+```{r dimensions-dataset}
+nrow(deaths)
+ncol(deaths)
+```
+
+# Data Cleaning
 
 Now that the data has been imported, the data needs to be cleaned
 to standardize the records and prevent inconsistencies.
@@ -81,9 +104,9 @@ to standardize the records and prevent inconsistencies.
 The `janitor` package provides the `clean_names()` function which handles
 problematic variable names, by doing the following cleaning steps:
 - Return names with only lowercase letters, with _ as a separator;
-- Handles special characters and spaces;
-- Appends numbers to duplicated names;
-- Converts “%” to “percent” to retain meaning.
+- Handle special characters and spaces;
+- Append numbers to duplicated names;
+- Convert “%” to “percent” to retain meaning.
 ```{r clean-names}
 deaths <- deaths %>% clean_names()
 ```
@@ -108,19 +131,23 @@ Since there are no duplicates, the `x` column can be safely deleted:
 ```{r delete-x}
 deaths <- deaths %>% select(-x)
 ```
-Another column that won't be used is `DateType`:
+Another column that won't be used in this analysis is `DateType`:
 ```{r delete-date-type}
 deaths <- deaths %>% select(-date_type)
 ```
-The data set contains a column named `morphine_not_heroin`,
-probably to specify that the person specifically used morphine
-instead of heroin, which is produced from morphine.
+The data set contains a column named `morphine_not_heroin`.
+This is probably due to the fact that heroin is quickly metabolized and 
+as such it's hard to detect. Tests to identify heroin usually check
+for the presence of morphine, which is a component of heroin.
+As such, it's useful to better specify if heroin or morphine were found.
+
 This column can be renamed to just `heroin`.
 ```{r rename-morphine}
 deaths <- deaths %>% rename(morphine = morphine_not_heroin)
 ```
 There also two columns related to fentanyl: `fentanyl` and `fentanyl_analogue`.
-For this analysis they can be reduced to just one column.
+This distinction is not useful for this analysis,
+so they can be reduced to just one column.
 ```{r reduce-fentanyl}
 deaths <- deaths %>%
   mutate(fentanyl = ifelse(fentanyl_analogue == 1, "1", fentanyl))
@@ -136,7 +163,7 @@ excluded from queries.
 ```{r mutate-all-na}
 deaths <- deaths %>% mutate_all(na_if, "")
 ```
-The `sex` field seems to contain a few fields with the `Unknown` value,
+A few records seem to contain the `Unknown` value for the `sex` field,
 which can also be converted to `NA`.
 ```{r sex-unknown-na}
 table(deaths$sex)
@@ -234,7 +261,7 @@ deaths <- deaths %>%
 ```
 
 
-# Analysis of the use of drugs
+# Analysis of the abuse of drugs
 
 To simplify the extraction of information about the drug abuse, a new data frame
 can be built using `pivot_longer`.
@@ -322,7 +349,12 @@ This could be related to the current opioid epidemic in the USA.
 
 Cocaine is also widespread, along with alcohol consumption.
 
-## Number of drugs used
+The fourth place is taken by benzodiazepine,
+which is actually a category of drugs that includes many legal medications,
+used to treat a variety of disorders. An example of legal benzodiazepine
+is Xanax, which is typically used to treat anxiety.
+
+## Number of distinct drugs used
 
 We can also analyze the number of (distinct) drugs used by the subjects.
 ```{r number-of-drugs}
@@ -351,7 +383,7 @@ the combination of drugs to an increased risk of overdose.
 The fact that there are subject with no drugs reported is noteworthy:
 this could suggest an error in the data insertion, or maybe there were
 signs of drug overdose on the patient,
-but the all the test executed were negative.
+but all the test executed were negative.
 
 ## Multiple drugs
 
@@ -369,6 +401,9 @@ death_by_multiple_drugs <- deaths_drugs %>%
 sprintf("%0.1f%%", death_by_multiple_drugs / count(deaths) * 100)
 ```
 
+So, the 68.5% of subjects oversdosed on multiple drugs: once again,
+this underlines the danger of combining multiple drugs.
+
 ## Combination of opioids and benzodiazepines
 
 A particularly lethal combination of drugs are opioids
@@ -381,7 +416,7 @@ death_op_ben <- deaths %>%
 
 sprintf("%0.1f%%", death_op_ben / count(deaths) * 100)
 ```
-## Single drug
+## Overdoses on single drug
 
 Still, a lot of people overdosed on a single drug. It's interesting to discover
 which one it is.
@@ -470,6 +505,9 @@ of them died in a hospital.
 
 ## Death location for most used drugs
 
+It could be interesting to plot the death location for the most used drugs,
+to verify if the distribution of locations discovered before is true 
+for each drug.
 ```{r death-location-drug}
 deaths_drugs %>%
   mutate(location = fct_lump_n(location, n = 3)) %>%
@@ -504,8 +542,12 @@ deaths_drugs %>%
        x = "Location",
        y = "Count")
 ```
+The results do not hold any surprise.
 The most recurring location of death seems to be the subjects resident for
 each type of drug.
+
+Only for cocaine, the percentage of people who died in their home is closer
+to the percentage of those who died in a hospital.
 
 # Analysis by sex
 
@@ -535,6 +577,9 @@ deaths %>%
 ```
 
 Almost three quarters of all the subjects in the data set are male.
+The reason for this is difficult to tell: it could be due to how the data set
+was built (i.e. which deaths were included), or it could suggest
+that most of the overdose victims are male.
 
 ## Most abused drugs for each sex
 
@@ -565,12 +610,10 @@ deaths_drugs %>%
 ```
 Heroin and fentanyl are the two most abused drugs by both sexes.
 More females than males abused benzodiazepines, which is the third
-most used drug by females and the sixth most popular between males.
+most used drug by females and the fifth most popular between males.
 Also males seem to have a tendency to consume more alcohol than female subjects.
 
-## TODO: at least one more
-
-# Distribution of overdose deaths over the years
+# Analysis by time
 
 An interesting information that can be easily discovered is the distribution
 of the deaths over the years.
@@ -596,6 +639,10 @@ deaths %>%
 In this plot we can see that the number of overdose is skyrocketing each
 following year. Once again this is probably related to the increasing
 number of drug users addicted to opiods.
+The exception is 2018, where the number deaths is slightly lower than 2017.
+This could be because there was an actual decrease in the overdose deaths,
+or it could suggest that not all the data for the year was included in the
+data set.
 
 ## Over the months
 
@@ -620,8 +667,8 @@ deaths %>%
   geom_text(nudge_y = 30)
 ```
 This plot does not contain any particularly useful information:
-the number of overdose cases is quite consistent. The slight fluctuations
-could be caused by the availability of drugs.
+the number of overdose cases is quite consistent over the months of the years.
+The slight fluctuations could be caused by the availability of drugs.
 
 ## Over the days of week
 
@@ -648,10 +695,9 @@ deaths %>%
   geom_text(nudge_y = 40)
 ```
 The number of deaths is higher during the weekends: this could be caused
-by parties and increased nightlife, where it is easier to come in contact
-with drugs.
+by parties and increased nightlife, where it is easier to find drugs.
 
-# Age
+# Analysis by age
 
 It's also interesting to study the age of the subjects.
 For this purpose, we can create a new data frame that
@@ -750,6 +796,10 @@ drugs_age %>%
        x = "Age group",
        y = "Number of subjects")
 ```
+The plots show that cocaine is more popular in the 40-49 age group,
+while ethanol is used most by the 50-59 age group.
+Fentanyl and heroin are preferred by the 30-39 age group.
+
 ## Age and sex
 
 ```{r age-sex}
@@ -770,15 +820,19 @@ drugs_age %>%
   geom_text(hjust = -0.2, size = 3.5) +
   coord_flip() +
   facet_wrap(vars(sex), scales = "free") +
-  labs(title = "Most popular drugs for each sex",
+  labs(title = "Distribution of sexes in age groups",
        x = "Age group",
        y = "Number of subjects") +
   theme(legend.position = "none")
 ```
+Most of the females belong in the 40-49 age group, while most of the males
+in the died at age 30-39.
 
-# Distribution of deaths in state
+# Analysis by geographical location
 
-It is interesting to analyze where the overdose deaths happened in the state.
+It is interesting to analyze the geographical location of overdose deaths.
+
+## Analysis by county
 
 Connecticut is composed of 8 counties: Fairfield, Hartford, Litchfield,
 Middlesex, New Haven, New London, Tolland, and Windham.
@@ -795,6 +849,7 @@ deaths_by_county <- deaths %>%
 
 plot_usmap(data = deaths_by_county,
            regions = "counties",
+           labels=TRUE,
            include = "CT") +
   scale_fill_continuous(
     na.value="white",
@@ -823,7 +878,7 @@ sprintf("%0.1f%%", sum(out_of_state[["values"]]) / count(deaths) * 100)
 ```
 The number of out-of-state subject is extremely low.
 
-We can plot the state of residence of such persons:
+We can nevertheless plot the state of residence of such persons:
 ```{r deaths-out-of-state-map}
 plot_usmap(data = out_of_state,
            regions = "state")+
@@ -837,7 +892,9 @@ plot_usmap(data = out_of_state,
   theme(legend.position = "right")
 ```
 It would seem that most of the people that do not reside in Connecticut
-come from the neighboring state of New York.
+come from the neighboring states of New York and Massachussets.
+
+## Analysis by city of death
 
 ```{r deaths-city-geo}
 geo <- deaths %>%
@@ -864,3 +921,4 @@ plot_usmap(include = "CT", regions = "counties") +
        size = "Number of deaths by overdose") +
   theme(legend.position = "right")
 ```
+As expected, most deaths happened in the big cities of the state.
