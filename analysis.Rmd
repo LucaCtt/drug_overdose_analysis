@@ -4,18 +4,13 @@ output:
   pdf_document: 
     keep_tex: yes
   html_notebook: default
-documentclass: book
 classoption: a4paper
 ---
 
 # Introduction
 
-In this report we will analyze a dataset concerning the deaths by overdose 
+In this report we will analyze a data set concerning the deaths by overdose 
 in the U.S. state of Connecticut (CT), between the years 2012 and 2018.
-
-The data set studied was taken at the following link: <https://www.kaggle.com/datasets/ruchi798/drug-overdose-deaths>.
-The source of the data set itself is <data.gov>, a website that publishes
-freely-accessible information regarding the public administration of the U.S.A.
 
 In chapter 1 the necessary initial steps for the analysis are explained.
 In chapter 2, we will continue with the data cleaning operations.
@@ -24,7 +19,12 @@ Finally, in chapter 9, we will summarise all the discoveries
 made in the analysis.
 
 ## Technical details
-This data analysis was made using R v4.1 on RStudio 2022.02.0.
+
+The data set studied was taken at the following link: <https://www.kaggle.com/datasets/ruchi798/drug-overdose-deaths>.
+The source of the data set itself is <https://data.gov>, a website that publishes
+freely-accessible information regarding the public administration of the U.S.A.
+
+This data analysis was made using RMarkdown on RStudio 2022.02.0, with R v4.1.
 All the code can be found at
 <https://github.com/LucaCtt/drug_overdose_analysis>.
 
@@ -41,7 +41,7 @@ library("lubridate")
 library("usmap")
 library("treemap")
 
-theme_set(theme_minimal()) #ggplot2 theme
+theme_set(theme_minimal()) #set ggplot2 theme globally
 ```
 - **tidyverse**: a collection of packages for data science, which includes
   dplyr, ggplot2, and mroe.
@@ -53,9 +53,8 @@ theme_set(theme_minimal()) #ggplot2 theme
 
 ## Import data set
 
-
-and it contains information regarding accidental drug related deaths in the U.S
-state of Connecticut, in the years between 2012-2018.
+The data set is contained in a `csv` file, so to import it the `read.csv`
+function can be used:
 ```{r read-csv}
 deaths <- read.csv("drug_deaths.csv")
 ```
@@ -103,6 +102,7 @@ to standardize the records and prevent inconsistencies.
 
 The `janitor` package provides the `clean_names()` function which handles
 problematic variable names, by doing the following cleaning steps:
+
 - Return names with only lowercase letters, with _ as a separator;
 - Handle special characters and spaces;
 - Append numbers to duplicated names;
@@ -247,6 +247,7 @@ ggplot(data = missing, aes(
   labs(title = "Percentage of NA values for each column", x = "Column", y =
          "Percentage of NA values")
 ```
+
 The columns that contain mostly NA values are not particularly
 useful, so they can be removed from the data frame.
 ```{r delete-na-columns}
@@ -343,6 +344,7 @@ deaths_drugs %>%
         axis.text.x = element_text(angle = 45, vjust = 0.8)) +
   geom_text(nudge_y = 80)  
 ```
+
 Heroin and fentanyl, both of which are opioids, are the two most
 used drugs by a significant margin.
 This could be related to the current opioid epidemic in the USA.
@@ -370,7 +372,7 @@ deaths_drugs %>%
   )) +
   geom_col(width = 0.5) +
   labs(title = "Distinct drugs found in subjects",
-       x = "Number of drugs", y = "Subjects") +
+       x = "Number of distinct drugs", y = "Subjects") +
   theme(legend.position = "none") +
   geom_text(nudge_y = 60)
 ```
@@ -437,11 +439,13 @@ deaths_drugs %>%
     fill = drug_name
   )) +
   geom_col(width=0.5) +
-  labs(title = "Overdose deaths by single drug", x = "Drug", y = "Number of deaths") +
+  labs(title = "Overdose deaths by single drug",
+       x = "Drug", y = "Number of subjects") +
   theme(legend.position = "none",
         axis.text.x = element_text(angle = 45,vjust=0.8)) +
   geom_text(nudge_y = 20)  
 ```
+
 So, heroin is the drug that is most overdosed on by itself
 with fentanyl coming second.
 This is not surprising because, as we have seen before,
@@ -481,6 +485,7 @@ A treemap can be used to show how the locations are distributed.
 locations <- deaths %>%
   group_by(location) %>%
   summarise(count = n()) %>%
+  mutate(location=paste(location,count,sep="\n")) %>%
   select(location,count)
 
 treemap(
@@ -489,17 +494,16 @@ treemap(
   vSize = "count",
   type = "index",
   
-  title = "Death locations",
+  title = "Distribution of death locations",
   
   border.col = c("black"),
   border.lwds = 1,
   
-  fontsize.labels = 4,
+  fontsize.labels = 20,
   fontcolor.labels = "white",
-  fontface.labels = 1,
-  inflate.labels = TRUE
 )
 ```
+
 The majority of the subjects died at their home, only less than half
 of them died in a hospital.
 
@@ -538,10 +542,11 @@ deaths_drugs %>%
   facet_wrap(~ drug_name, scales = "free_x") +
   theme(legend.position = "none") +
   theme(axis.text.x = element_text(angle = 45,vjust=0.6)) +
-  labs(title = "Death Location by Drug Name",
+  labs(title = "Death Location by Drug",
        x = "Location",
-       y = "Count")
+       y = "Number of subjects")
 ```
+
 The results do not hold any surprise.
 The most recurring location of death seems to be the subjects resident for
 each type of drug.
@@ -563,17 +568,20 @@ deaths %>%
   filter(!is.na(sex), sex != "Unknown") %>%
   group_by(sex) %>%
   summarise(count = n()) %>%
-  ggplot(aes(
-    x = sex,
-    y = count,
-    label = count,
-    fill = sex
-  )) +
-  geom_bar(stat = "identity") +
-  labs(title = "Overdose deaths distributed by sex",
-       x = "Sex", y = "Number of deaths") +
-  geom_text(nudge_y = 200,  size = 5) +
-  theme(legend.position = "none")
+  mutate(sex=paste(sex,count,sep="\n")) %>%
+  treemap(
+    index = "sex",
+    vSize = "count",
+    type = "index",
+    
+    title = "Distribution of death locations",
+    
+    border.col = c("black"),
+    border.lwds = 1,
+    
+    fontsize.labels = 20,
+    fontcolor.labels = "white",
+)
 ```
 
 Almost three quarters of all the subjects in the data set are male.
@@ -608,6 +616,7 @@ deaths_drugs %>%
        y = "Number of subjects") +
   theme(legend.position = "none")
 ```
+
 Heroin and fentanyl are the two most abused drugs by both sexes.
 More females than males abused benzodiazepines, which is the third
 most used drug by females and the fifth most popular between males.
@@ -636,6 +645,7 @@ deaths %>%
   scale_y_continuous(expand = expansion(add = c(0, 300))) +
   geom_text(nudge_y = 60) 
 ```
+
 In this plot we can see that the number of overdose is skyrocketing each
 following year. Once again this is probably related to the increasing
 number of drug users addicted to opiods.
@@ -666,6 +676,7 @@ deaths %>%
   scale_y_continuous(expand = expansion(add = c(0, 300))) +
   geom_text(nudge_y = 30)
 ```
+
 This plot does not contain any particularly useful information:
 the number of overdose cases is quite consistent over the months of the years.
 The slight fluctuations could be caused by the availability of drugs.
@@ -694,6 +705,7 @@ deaths %>%
   scale_y_continuous(expand = expansion(add = c(0, 300))) +
   geom_text(nudge_y = 40)
 ```
+
 The number of deaths is higher during the weekends: this could be caused
 by parties and increased nightlife, where it is easier to find drugs.
 
@@ -704,6 +716,7 @@ For this purpose, we can create a new data frame that
 contains, for each subject, the age group they belong to.
 
 The age groups considered are:
+
 - < 20
 - 20-29
 - 30-39
@@ -756,6 +769,11 @@ deaths_age %>%
   )
 ```
 
+What's interesting in this plot is that it shows that the majority of subjects
+are older than 30 years old.
+
+## Distribution of deaths for most popular drugs by age group
+
 ```{r deaths-age-drugs}
 drugs_age <- deaths_drugs %>%
   select(id,age,sex,drug_name,value) %>%
@@ -792,10 +810,11 @@ drugs_age %>%
   theme(legend.position = "none") +
   scale_x_discrete(limits = rev) +
   scale_y_continuous(expand = expansion(add = c(0, 200))) +
-  labs(title = "Distribution of drug used by age group",
+  labs(title = "Distribution of drugs used by age group",
        x = "Age group",
        y = "Number of subjects")
 ```
+
 The plots show that cocaine is more popular in the 40-49 age group,
 while ethanol is used most by the 50-59 age group.
 Fentanyl and heroin are preferred by the 30-39 age group.
@@ -825,8 +844,57 @@ drugs_age %>%
        y = "Number of subjects") +
   theme(legend.position = "none")
 ```
+
 Most of the females belong in the 40-49 age group, while most of the males
 in the died at age 30-39.
+
+## Death location and age
+
+```{r location-age}
+location_age <- deaths %>%
+  select(id,age,location) %>%
+  filter(!is.na(location),
+         location %in% c("Hospital", "Residence", "Other")) %>%
+  mutate(
+    age_group = case_when(
+      age < 20             ~ "< 20",
+      age >= 20 & age < 30 ~ "20-29",
+      age >= 30 & age < 40 ~ "30-39",
+      age >= 40 & age < 50 ~ "40-49",
+      age >= 50 & age < 60 ~ "50-59",
+      age >= 60            ~ "> 60",
+    ),
+    age_group = factor(
+      age_group,
+      levels = c("< 20", "20-29", "30-39", "40-49", "50-59", "> 60")
+    )
+  )
+
+location_age %>%
+  group_by(age_group, location) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  ggplot(aes(
+    x = age_group,
+    y = count,
+    fill = age_group,
+    label = count
+  )) +
+  geom_col(width = 0.5) +
+  coord_flip() +
+  geom_text(hjust = -0.2) +
+  facet_wrap(vars(location)) +
+  theme(legend.position = "none") +
+  scale_x_discrete(limits = rev) +
+  scale_y_continuous(expand = expansion(add = c(0, 200))) +
+  labs(title = "Distribution of drug used by age group",
+       x = "Age group",
+       y = "Number of subjects")
+```
+
+This distribution shows that the majority of the people that died in
+a hospital were in the 40-49 age group, with the 30-39 coming close.
+Most of those that died in their residence were in the 50-59 age group.
+
 
 # Analysis by geographical location
 
@@ -860,6 +928,7 @@ plot_usmap(data = deaths_by_county,
   ) +
   theme(legend.position = "right")
 ```
+
 Unsurprisingly, most reports are located in the counties of Hartford, Fairfield,
 and New Haven, which are the most populated counties in the state.
 
@@ -891,7 +960,8 @@ plot_usmap(data = out_of_state,
   ) +
   theme(legend.position = "right")
 ```
-It would seem that most of the people that do not reside in Connecticut
+
+It seems that most of the people that do not reside in Connecticut
 come from the neighboring states of New York and Massachussets.
 
 ## Analysis by city of death
@@ -918,7 +988,8 @@ plot_usmap(include = "CT", regions = "counties") +
   scale_size_continuous(range = c(0.5, 16),
                         labels = scales::comma) +
   labs(title = "Map of deaths by overdose",
-       size = "Number of deaths by overdose") +
+       size = "Deaths by overdose") +
   theme(legend.position = "right")
 ```
+
 As expected, most deaths happened in the big cities of the state.
