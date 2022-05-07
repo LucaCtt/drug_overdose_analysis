@@ -993,3 +993,33 @@ plot_usmap(include = "CT", regions = "counties") +
 ```
 
 As expected, most deaths happened in the big cities of the state.
+
+# Conclusions
+
+From this analysis we managed to discover that the most popular drugs
+are opioids, which is coherent to the current opioid epidemic.
+Most of the individuals reported in the data set overdosed on two or more
+drugs at the same time, underlining the increased danger of using
+multiple distinct drugs.
+Dangerous combinations, such as opioids with benzodiazepines, or ethanol
+with other drugs, are widespread.
+
+Most of the individuals are male, however,
+since the way the data set was built is unknown, it is difficult to conclude
+for certain that most of the actual overdose victims are male.
+More females than males used benzodiazepines, and males are more likely
+to use ethanol.
+
+Very few of the reported deaths are of people younger than 20 years old,
+and older than 60.
+
+The number of overdoses increased dramatically through the years, and it
+stabilized in 2018. This could however be due to an incomplete data set.
+There is a higher number of deaths during the weekends, and no
+particular pattern can be observed through the months of the years.
+
+The vast majority of subjects overdosed in their homes, less than half of them
+died in a hospital.
+As for the geographical location of the deaths, most of them happened
+in the more populated cities (and counties) in the state.
+Only a handful of the deaths involve out-of-state individuals.
